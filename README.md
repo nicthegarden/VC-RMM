@@ -2,6 +2,24 @@
 
 A comprehensive, cross-platform Remote Monitoring and Management (RMM) solution built with Node.js. Monitor and manage Windows and Linux machines from a centralized web dashboard.
 
+## 🚀 Quick Install (Get Running in 5 Minutes)
+
+### One-Line Server Install
+```bash
+curl -fsSL https://raw.githubusercontent.com/nicthegarden/VC-RMM/main/install-server.sh | bash -s -- --service
+```
+
+### One-Line Agent Install (Run on each client machine)
+```bash
+# Replace SERVER_IP with your server's IP
+curl -fsSL https://raw.githubusercontent.com/nicthegarden/VC-RMM/main/install-agent.sh | bash -s -- --server-url ws://SERVER_IP:3000/ws --service
+```
+
+### Access Dashboard
+Open `http://SERVER_IP:3000` in your browser
+
+**📖 For detailed setup options, see [QUICKSTART.md](QUICKSTART.md)**
+
 ## Features
 
 ### Server Features
@@ -41,6 +59,8 @@ RMM/
 │   │   ├── css/
 │   │   ├── js/
 │   │   └── index.html
+│   ├── config/
+│   │   └── default.json   # Server configuration
 │   └── package.json
 │
 ├── client/                # RMM Agent
@@ -55,7 +75,13 @@ RMM/
 │   │   └── uninstall-service.js  # Windows service uninstaller
 │   └── package.json
 │
-└── README.md
+├── install-server.sh      # Automated server setup script
+├── install-agent.sh       # Automated agent setup script (Linux/Mac)
+├── install-agent.ps1      # Automated agent setup script (Windows)
+├── QUICKSTART.md          # Quick start guide
+├── CONFIGURATION.md       # Detailed configuration guide
+├── README.md              # This file
+└── LICENSE                # MIT License
 ```
 
 ## Quick Start

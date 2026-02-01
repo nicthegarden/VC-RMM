@@ -1,0 +1,419 @@
+#!/bin/bash
+
+# RMM Server Setup Script
+# This script automates the installation and setup of the RMM Server
+# Usage: ./install-server.sh [options]
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Default values
+SERVER_PORT="3000"
+SERVER_HOST="0.0.0.0"
+INSTALL_DIR="/opt/rmm-server"
+RUN_AS_SERVICE=false
+SERVICE_NAME="rmm-server"
+NODE_VERSION="18"
+
+# Function to print colored output
+print_status() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+# Function to check if command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Function to detect OS
+detect_os() {
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        if [ -f /etc/debian_version ]; then
+            echo "debian"
+        elif [ -f /etc/redhat-release ]; then
+            echo "rhel"
+        elif [ -f /etc/arch-release ]; then
+            echo "arch"
+        else
+            echo "linux"
+        fi
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "macos"
+    else
+        echo "unknown"
+    fi
+}
+
+# Function to install Node.js
+install_nodejs() {
+    print_status "Installing Node.js ${NODE_VERSION}..."
+    
+    OS=$(detect_os)
+    
+    case $OS in
+        debian)
+            curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -
+            apt-get install -y nodejs
+            ;;
+        rhel)
+            curl -fsSL https://rpm.nodesource.com/setup_${NODE_VERSION}.x | bash -
+            yum install -y nodejs
+            ;;
+        arch)
+            pacman -S --noconfirm nodejs npm
+            ;;
+        macos)
+            if command_exists brew; then
+                brew install node@${NODE_VERSION}
+            else
+                print_error "Homebrew not found. Please install Homebrew first."
+                exit 1
+            fi
+            ;;
+        *)
+            print_error "Unsupported operating system"
+            exit 1
+            ;;
+    esac
+    
+    print_success "Node.js installed successfully"
+}
+
+# Function to check prerequisites
+check_prerequisites() {
+    print_status "Checking prerequisites..."
+    
+    # Check if running as root (not recommended for npm install)
+    if [ "$EUID" -eq 0 ]; then
+        print_warning "Running as root. Creating a dedicated user is recommended."
+    fi
+    
+    # Check Node.js
+    if command_exists node; then
+        NODE_CURRENT=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
+        if [ "$NODE_CURRENT" -ge "$NODE_VERSION" ]; then
+            print_success "Node.js $(node --version) is installed"
+        else
+            print_warning "Node.js version is too old. Required: ${NODE_VERSION}+"
+            install_nodejs
+        fi
+    else
+        print_status "Node.js not found. Installing..."
+        install_nodejs
+    fi
+    
+    # Check npm
+    if ! command_exists npm; then
+        print_error "npm not found. Please install npm."
+        exit 1
+    fi
+    
+    # Check git
+    if ! command_exists git; then
+        print_status "Installing git..."
+        OS=$(detect_os)
+        case $OS in
+            debian) apt-get update && apt-get install -y git ;;
+            rhel) yum install -y git ;;
+            arch) pacman -S --noconfirm git ;;
+            macos) brew install git ;;
+        esac
+    fi
+    
+    print_success "Prerequisites check completed"
+}
+
+# Function to download and setup server
+setup_server() {
+    print_status "Setting up RMM Server..."
+    
+    # Create installation directory
+    if [ -d "$INSTALL_DIR" ]; then
+        print_warning "Installation directory already exists: $INSTALL_DIR"
+        read -p "Do you want to overwrite? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            print_status "Installation cancelled"
+            exit 0
+        fi
+        rm -rf "$INSTALL_DIR"
+    fi
+    
+    mkdir -p "$INSTALL_DIR"
+    cd "$INSTALL_DIR"
+    
+    # Clone from GitHub
+    print_status "Downloading RMM Server..."
+    git clone --depth 1 https://github.com/nicthegarden/VC-RMM.git .
+    
+    if [ ! -d "server" ]; then
+        print_error "Server directory not found after clone"
+        exit 1
+    fi
+    
+    cd server
+    
+    # Install dependencies
+    print_status "Installing dependencies..."
+    npm install
+    
+    # Create data directory
+    mkdir -p data
+    
+    # Update configuration
+    print_status "Configuring server..."
+    cat > config/default.json <<EOF
+{
+  "port": ${SERVER_PORT},
+  "host": "${SERVER_HOST}",
+  "database": {
+    "path": "./data/rmm.db"
+  },
+  "websocket": {
+    "heartbeatInterval": 30000,
+    "reconnectTimeout": 5000
+  },
+  "cleanup": {
+    "oldCommandsHours": 24,
+    "metricsRetentionDays": 30,
+    "logsRetentionDays": 7
+  },
+  "security": {
+    "corsEnabled": true,
+    "rateLimitEnabled": false,
+    "authEnabled": false
+  }
+}
+EOF
+    
+    print_success "Server setup completed"
+}
+
+# Function to create systemd service
+create_service() {
+    print_status "Creating systemd service..."
+    
+    if [ "$EUID" -ne 0 ]; then
+        print_error "Creating service requires root privileges. Run with sudo."
+        return 1
+    fi
+    
+    # Detect current user (the one who ran sudo)
+    CURRENT_USER=${SUDO_USER:-$USER}
+    CURRENT_GROUP=$(id -gn "$CURRENT_USER")
+    
+    cat > /etc/systemd/system/${SERVICE_NAME}.service <<EOF
+[Unit]
+Description=RMM Server - Remote Monitoring and Management Server
+After=network.target
+
+[Service]
+Type=simple
+User=${CURRENT_USER}
+Group=${CURRENT_GROUP}
+WorkingDirectory=${INSTALL_DIR}/server
+ExecStart=/usr/bin/node src/app.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=PORT=${SERVER_PORT}
+Environment=HOST=${SERVER_HOST}
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    systemctl daemon-reload
+    systemctl enable ${SERVICE_NAME}
+    
+    print_success "Service created: ${SERVICE_NAME}"
+    print_status "Start with: sudo systemctl start ${SERVICE_NAME}"
+    print_status "Check status: sudo systemctl status ${SERVICE_NAME}"
+    print_status "View logs: sudo journalctl -u ${SERVICE_NAME} -f"
+}
+
+# Function to setup firewall
+setup_firewall() {
+    print_status "Configuring firewall..."
+    
+    if command_exists ufw; then
+        ufw allow ${SERVER_PORT}/tcp
+        print_success "Added port ${SERVER_PORT} to UFW"
+    elif command_exists firewall-cmd; then
+        firewall-cmd --permanent --add-port=${SERVER_PORT}/tcp
+        firewall-cmd --reload
+        print_success "Added port ${SERVER_PORT} to firewalld"
+    elif command_exists iptables; then
+        iptables -A INPUT -p tcp --dport ${SERVER_PORT} -j ACCEPT
+        print_success "Added port ${SERVER_PORT} to iptables"
+    else
+        print_warning "No firewall detected. Please manually open port ${SERVER_PORT}"
+    fi
+}
+
+# Function to display completion message
+show_completion() {
+    echo
+    echo "=========================================="
+    print_success "RMM Server Installation Complete!"
+    echo "=========================================="
+    echo
+    echo "Installation Directory: ${INSTALL_DIR}"
+    echo "Server Address: http://${SERVER_HOST}:${SERVER_PORT}"
+    echo "Dashboard URL: http://$(hostname -I | awk '{print $1}'):${SERVER_PORT}"
+    echo
+    
+    if [ "$RUN_AS_SERVICE" = true ]; then
+        echo "Service: ${SERVICE_NAME}"
+        echo "  Start:   sudo systemctl start ${SERVICE_NAME}"
+        echo "  Stop:    sudo systemctl stop ${SERVICE_NAME}"
+        echo "  Status:  sudo systemctl status ${SERVICE_NAME}"
+        echo "  Logs:    sudo journalctl -u ${SERVICE_NAME} -f"
+        echo
+        echo "To start the server now, run:"
+        echo "  sudo systemctl start ${SERVICE_NAME}"
+    else
+        echo "To start the server manually, run:"
+        echo "  cd ${INSTALL_DIR}/server && npm start"
+    fi
+    
+    echo
+    echo "Next Steps:"
+    echo "  1. Ensure port ${SERVER_PORT} is accessible from your network"
+    echo "  2. Install the agent on client machines"
+    echo "  3. Access the dashboard at http://YOUR-SERVER-IP:${SERVER_PORT}"
+    echo
+    echo "Documentation: ${INSTALL_DIR}/README.md"
+    echo "Configuration: ${INSTALL_DIR}/server/config/default.json"
+    echo
+    echo "=========================================="
+}
+
+# Function to parse arguments
+parse_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --port)
+                SERVER_PORT="$2"
+                shift 2
+                ;;
+            --host)
+                SERVER_HOST="$2"
+                shift 2
+                ;;
+            --install-dir)
+                INSTALL_DIR="$2"
+                shift 2
+                ;;
+            --service)
+                RUN_AS_SERVICE=true
+                shift
+                ;;
+            --no-firewall)
+                SKIP_FIREWALL=true
+                shift
+                ;;
+            --help)
+                show_help
+                exit 0
+                ;;
+            *)
+                print_error "Unknown option: $1"
+                show_help
+                exit 1
+                ;;
+        esac
+    done
+}
+
+# Function to show help
+show_help() {
+    cat <<EOF
+RMM Server Setup Script
+
+Usage: ./install-server.sh [OPTIONS]
+
+Options:
+    --port PORT         Server port (default: 3000)
+    --host HOST         Server bind address (default: 0.0.0.0)
+    --install-dir PATH  Installation directory (default: /opt/rmm-server)
+    --service           Install as systemd service
+    --no-firewall       Skip firewall configuration
+    --help              Show this help message
+
+Examples:
+    # Basic installation
+    ./install-server.sh
+
+    # Custom port with service
+    ./install-server.sh --port 8080 --service
+
+    # Localhost only
+    ./install-server.sh --host 127.0.0.1
+
+EOF
+}
+
+# Main function
+main() {
+    echo "=========================================="
+    echo "RMM Server Setup"
+    echo "=========================================="
+    echo
+    
+    # Parse command line arguments
+    parse_arguments "$@"
+    
+    # Show configuration
+    print_status "Configuration:"
+    echo "  Port: ${SERVER_PORT}"
+    echo "  Host: ${SERVER_HOST}"
+    echo "  Install Directory: ${INSTALL_DIR}"
+    echo "  Service: ${RUN_AS_SERVICE}"
+    echo
+    
+    read -p "Continue with installation? (Y/n): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]] && [ ! -z "$REPLY" ]; then
+        print_status "Installation cancelled"
+        exit 0
+    fi
+    
+    # Run installation steps
+    check_prerequisites
+    setup_server
+    
+    # Setup firewall (unless skipped)
+    if [ "$SKIP_FIREWALL" != true ]; then
+        setup_firewall
+    fi
+    
+    # Create service if requested
+    if [ "$RUN_AS_SERVICE" = true ]; then
+        create_service
+    fi
+    
+    # Show completion message
+    show_completion
+}
+
+# Run main function
+main "$@"
