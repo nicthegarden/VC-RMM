@@ -1,0 +1,44 @@
+{
+  "name": "rmm-agent",
+  "version": "1.0.0",
+  "description": "RMM Agent - Cross-platform Remote Monitoring and Management Agent",
+  "main": "src/agent.js",
+  "scripts": {
+    "start": "node src/agent.js",
+    "dev": "nodemon src/agent.js",
+    "install-service": "node scripts/install-service.js",
+    "uninstall-service": "node scripts/uninstall-service.js",
+    "build": "pkg . --out-path=dist/"
+  },
+  "keywords": ["rmm", "agent", "remote", "monitoring", "management"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.14.2",
+    "systeminformation": "^5.21.20",
+    "node-cron": "^3.0.3",
+    "uuid": "^9.0.0"
+  },
+  "optionalDependencies": {
+    "node-windows": "^1.0.0-beta.8"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "pkg": "^5.8.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "pkg": {
+    "scripts": [
+      "src/**/*.js"
+    ],
+    "assets": [
+      "config/**/*"
+    ],
+    "targets": [
+      "node18-linux-x64",
+      "node18-win-x64"
+    ]
+  }
+}

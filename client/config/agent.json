@@ -1,0 +1,6 @@
+{
+  "serverUrl": "ws://localhost:3000/ws",
+  "heartbeatInterval": 30000,
+  "metricsInterval": 60000,
+  "logLevel": "info"
+}

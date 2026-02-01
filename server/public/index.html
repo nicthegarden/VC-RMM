@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RMM Dashboard - Remote Monitoring & Management</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <h1>RMM Dashboard</h1>
+            <div class="status-indicator">
+                <span class="status-dot" id="connection-status"></span>
+                <span id="connection-text">Connecting...</span>
+            </div>
+        </header>
+
+        <nav class="sidebar">
+            <ul class="nav-menu">
+                <li class="nav-item active" data-view="machines">
+                    <span class="nav-icon">💻</span>
+                    <span class="nav-text">Machines</span>
+                </li>
+                <li class="nav-item" data-view="groups">
+                    <span class="nav-icon">📁</span>
+                    <span class="nav-text">Groups</span>
+                </li>
+                <li class="nav-item" data-view="commands">
+                    <span class="nav-icon">⚡</span>
+                    <span class="nav-text">Commands</span>
+                </li>
+                <li class="nav-item" data-view="logs">
+                    <span class="nav-icon">📋</span>
+                    <span class="nav-text">Logs</span>
+                </li>
+                <li class="nav-item" data-view="packages">
+                    <span class="nav-icon">📦</span>
+                    <span class="nav-text">Packages</span>
+                </li>
+            </ul>
+        </nav>
+
+        <main class="main-content">
+            <!-- Machines View -->
+            <div class="view active" id="machines-view">
+                <div class="view-header">
+                    <h2>Machines</h2>
+                    <div class="actions">
+                        <button class="btn btn-primary" id="refresh-machines">Refresh</button>
+                        <button class="btn btn-secondary" id="add-group-btn">Manage Groups</button>
+                    </div>
+                </div>
+                <div class="machines-grid" id="machines-container">
+                    <!-- Machines will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Groups View -->
+            <div class="view" id="groups-view">
+                <div class="view-header">
+                    <h2>Machine Groups</h2>
+                    <button class="btn btn-primary" id="create-group-btn">Create Group</button>
+                </div>
+                <div class="groups-list" id="groups-container">
+                    <!-- Groups will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Commands View -->
+            <div class="view" id="commands-view">
+                <div class="view-header">
+                    <h2>Command History</h2>
+                    <div class="actions">
+                        <select id="command-machine-filter">
+                            <option value="">All Machines</option>
+                        </select>
+                        <button class="btn btn-primary" id="refresh-commands">Refresh</button>
+                    </div>
+                </div>
+                <div class="commands-list" id="commands-container">
+                    <!-- Commands will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Logs View -->
+            <div class="view" id="logs-view">
+                <div class="view-header">
+                    <h2>System Logs</h2>
+                    <div class="actions">
+                        <select id="logs-machine-filter">
+                            <option value="">All Machines</option>
+                        </select>
+                        <select id="logs-level-filter">
+                            <option value="">All Levels</option>
+                            <option value="error">Error</option>
+                            <option value="warning">Warning</option>
+                            <option value="info">Info</option>
+                        </select>
+                        <button class="btn btn-primary" id="refresh-logs">Refresh</button>
+                    </div>
+                </div>
+                <div class="logs-container" id="logs-container">
+                    <!-- Logs will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Packages View -->
+            <div class="view" id="packages-view">
+                <div class="view-header">
+                    <h2>Package Management</h2>
+                    <div class="actions">
+                        <select id="packages-machine-filter">
+                            <option value="">Select Machine</option>
+                        </select>
+                        <button class="btn btn-primary" id="refresh-packages">Refresh</button>
+                    </div>
+                </div>
+                <div class="packages-container" id="packages-container">
+                    <div class="placeholder">Select a machine to view packages</div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Machine Detail Modal -->
+        <div class="modal" id="machine-modal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2 id="machine-modal-title">Machine Details</h2>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="machine-tabs">
+                        <button class="tab-btn active" data-tab="overview">Overview</button>
+                        <button class="tab-btn" data-tab="metrics">Metrics</button>
+                        <button class="tab-btn" data-tab="terminal">Terminal</button>
+                        <button class="tab-btn" data-tab="files">Files</button>
+                        <button class="tab-btn" data-tab="logs">Logs</button>
+                        <button class="tab-btn" data-tab="packages">Packages</button>
+                    </div>
+                    
+                    <div class="tab-content active" id="overview-tab">
+                        <div class="machine-info" id="machine-info">
+                            <!-- Machine info will be loaded here -->
+                        </div>
+                        <div class="quick-actions">
+                            <h3>Quick Actions</h3>
+                            <div class="action-buttons">
+                                <button class="btn btn-primary" onclick="executeCommand('shell', 'whoami')">Whoami</button>
+                                <button class="btn btn-primary" onclick="executeCommand('shell', 'uptime')">Uptime</button>
+                                <button class="btn btn-primary" onclick="executeCommand('shell', 'df -h')">Disk Usage</button>
+                                <button class="btn btn-secondary" onclick="requestReboot()">Reboot</button>
+                                <button class="btn btn-secondary" onclick="requestShutdown()">Shutdown</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-content" id="metrics-tab">
+                        <div class="metrics-charts" id="metrics-container">
+                            <!-- Metrics will be loaded here -->
+                        </div>
+                    </div>
+                    
+                    <div class="tab-content" id="terminal-tab">
+                        <div class="terminal-container">
+                            <div class="terminal-output" id="terminal-output"></div>
+                            <div class="terminal-input-line">
+                                <span class="prompt">$</span>
+                                <input type="text" id="terminal-input" placeholder="Enter command..." autocomplete="off">
+                                <button class="btn btn-primary" id="terminal-send">Send</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-content" id="files-tab">
+                        <div class="file-browser">
+                            <div class="file-path-bar">
+                                <button class="btn btn-small" id="file-back">← Back</button>
+                                <span id="current-path">/</span>
+                                <button class="btn btn-small" id="file-refresh">Refresh</button>
+                            </div>
+                            <div class="file-list" id="file-list">
+                                <!-- Files will be loaded here -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-content" id="logs-tab">
+                        <div class="logs-view" id="machine-logs-container">
+                            <!-- Machine logs will be loaded here -->
+                        </div>
+                    </div>
+                    
+                    <div class="tab-content" id="packages-tab">
+                        <div class="packages-view" id="machine-packages-container">
+                            <!-- Machine packages will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Group Modal -->
+        <div class="modal" id="group-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="group-modal-title">Create Group</h2>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="group-form">
+                        <div class="form-group">
+                            <label for="group-name">Group Name</label>
+                            <input type="text" id="group-name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="group-description">Description</label>
+                            <textarea id="group-description" rows="3"></textarea>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Save</button>
+                            <button type="button" class="btn btn-secondary modal-cancel">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Command Execution Modal -->
+        <div class="modal" id="command-modal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>Execute Command</h2>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Target</label>
+                        <div class="target-selector">
+                            <select id="command-target-type">
+                                <option value="machine">Single Machine</option>
+                                <option value="group">Group</option>
+                            </select>
+                            <select id="command-target">
+                                <option value="">Select target...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="command-type">Command Type</label>
+                        <select id="command-type">
+                            <option value="shell">Shell Command</option>
+                            <option value="script">Script</option>
+                            <option value="reboot">Reboot</option>
+                            <option value="shutdown">Shutdown</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="command-input-group">
+                        <label for="command-text">Command</label>
+                        <textarea id="command-text" rows="4" placeholder="Enter command or script..."></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-primary" id="execute-cmd-btn">Execute</button>
+                        <button type="button" class="btn btn-secondary modal-cancel">Cancel</button>
+                    </div>
+                    <div class="command-output-section" id="command-output-section" style="display: none;">
+                        <h3>Output</h3>
+                        <pre class="command-output" id="command-output"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notifications -->
+        <div class="toast-container" id="toast-container"></div>
+    </div>
+
+    <script src="js/dashboard.js"></script>
+</body>
+</html>
